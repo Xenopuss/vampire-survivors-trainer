@@ -13,16 +13,16 @@
 
 #pragma comment(lib, "d3d11.lib")
 
-// --- KÜRESEL POINTERLAR ---
+// --- GLOBAL POINTERS ---
 uintptr_t pPlayer = 0;
 uintptr_t pGoldBase = 0;
 
-// Hile Durumları
+// Cheat Statuses
 bool bGodMode = false;
 BYTE godModeOriginal[] = { 0xF3, 0x0F, 0x11, 0x86, 0x28, 0x02, 0x00, 0x00 };
 uintptr_t godModeAddress = 0;
 
-// Bellek Araçları
+// Memory Management Tools
 void Patch(BYTE* dst, BYTE* src, unsigned int size) {
     DWORD oldprotect;
     VirtualProtect(dst, size, PAGE_EXECUTE_READWRITE, &oldprotect);
@@ -37,6 +37,7 @@ void Nop(BYTE* dst, unsigned int size) {
     VirtualProtect(dst, size, oldprotect, &oldprotect);
 }
 
+// Convert IDA style pattern to bytes
 std::vector<int> PatternToBytes(const char* pattern) {
     std::vector<int> bytes;
     char* start = const_cast<char*>(pattern);
@@ -45,7 +46,7 @@ std::vector<int> PatternToBytes(const char* pattern) {
         if (*current == '?') {
             ++current;
             if (*current == '?') ++current;
-            bytes.push_back(-1); 
+            bytes.push_back(-1); // Wildcard
         } else {
             bytes.push_back(strtol(current, &current, 16));
         }
@@ -53,6 +54,7 @@ std::vector<int> PatternToBytes(const char* pattern) {
     return bytes;
 }
 
+// Memory pattern scanner
 uintptr_t PatternScan(const char* moduleName, const char* pattern) {
     HMODULE hModule = GetModuleHandleA(moduleName);
     if (!hModule) return 0;
@@ -78,24 +80,33 @@ uintptr_t PatternScan(const char* moduleName, const char* pattern) {
     return 0;
 }
 
+// 64-bit Absolute Jump Trampoline Creator
 void* CreateHook(BYTE* targetAddress, BYTE* payload, size_t payloadSize, size_t overwrittenLength) {
+    // 1. Allocate memory for shellcode
     void* shellcode = VirtualAlloc(nullptr, payloadSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!shellcode) return nullptr;
     memcpy(shellcode, payload, payloadSize);
+    
+    // 2. Set return address for shellcode
     uintptr_t returnAddress = (uintptr_t)targetAddress + overwrittenLength;
     memcpy((BYTE*)shellcode + payloadSize - 8, &returnAddress, 8);
+    
+    // 3. Inject hook at target
     DWORD oldProtect;
     VirtualProtect(targetAddress, overwrittenLength, PAGE_EXECUTE_READWRITE, &oldProtect);
-    memset(targetAddress, 0x90, overwrittenLength);
+    memset(targetAddress, 0x90, overwrittenLength); // Nop original area
+    
+    // FF 25 00 00 00 00 [8-Byte Addr] (jmp qword ptr [rip+0])
     targetAddress[0] = 0xFF; targetAddress[1] = 0x25;
     targetAddress[2] = 0x00; targetAddress[3] = 0x00;
     targetAddress[4] = 0x00; targetAddress[5] = 0x00;
     memcpy(&targetAddress[6], &shellcode, 8);
+    
     VirtualProtect(targetAddress, overwrittenLength, oldProtect, &oldProtect);
     return shellcode;
 }
 
-// --- IMGUI VE DIRECTX 11 MOTORU ---
+// --- IMGUI AND DIRECTX 11 ENGINE ---
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 typedef HRESULT(__stdcall* Present_t)(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags);
@@ -108,11 +119,11 @@ ID3D11DeviceContext* pContext = nullptr;
 ID3D11RenderTargetView* mainRenderTargetView = nullptr;
 bool init = false;
 
-// Fare ve Klavye Girdilerini Yakalama
+// Hook for mouse and keyboard inputs
 LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (init) {
         ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
-        // İmleç menü üzerindeyken oyunun tıklamaları algılamasını engellemek için:
+        // Block mouse clicks if interacting with ImGui
         if (ImGui::GetIO().WantCaptureMouse) {
             return TRUE;
         }
@@ -120,7 +131,7 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
 }
 
-// Oyunun Görüntüsüne Sızdığımız Ana Döngü
+// DirectX Present Hook (Main Render Loop)
 HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
     if (!init) {
         if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void**)&pDevice))) {
@@ -136,14 +147,14 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
                 pBackBuffer->Release();
             }
 
-            // Fare girdileri için WndProc kancası
+            // Hook WndProc to capture input
             oWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)WndProc);
 
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-            // ELITE Tema Tasarımı
+            // ELITE Theme Styling
             ImGui::StyleColorsDark();
             ImGuiStyle& style = ImGui::GetStyle();
             style.WindowRounding = 8.0f;
@@ -163,12 +174,12 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
         }
     }
 
-    // Her Kare (Frame) Başlangıcı
+    // New Frame Initialization
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
-    // Menü Çizimi
+    // Menu Drawing
     ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(350, 320), ImGuiCond_FirstUseEver);
     
@@ -194,7 +205,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
     ImGui::Separator();
     ImGui::Spacing();
 
-    // God Mode Checkbox
+    // God Mode Logic
     if (ImGui::Checkbox("Enable God Mode", &bGodMode)) {
         if (godModeAddress) {
             if (bGodMode) Nop((BYTE*)godModeAddress, 8);
@@ -204,7 +215,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 
     ImGui::Spacing();
     
-    // Altın Butonu
+    // Add Gold Logic
     if (ImGui::Button("Add 1,000,000 Gold", ImVec2(-1, 35))) {
         if (pGoldBase) {
             float currentGold = *(float*)(pGoldBase + 0x84);
@@ -212,7 +223,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
         }
     }
 
-    // EXP Butonu
+    // Add EXP Logic
     if (ImGui::Button("Add 10,000 EXP", ImVec2(-1, 35))) {
         if (pPlayer) {
             float currentExp = *(float*)(pPlayer + 0x23C);
@@ -220,7 +231,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
         }
     }
 
-    // Can Fulleme Butonu
+    // Restore Health Logic
     if (ImGui::Button("Restore Full Health", ImVec2(-1, 35))) {
         if (pPlayer) {
             *(float*)(pPlayer + 0x228) = 9999.0f;
@@ -237,12 +248,12 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
     return oPresent(pSwapChain, SyncInterval, Flags);
 }
 
-// Ana Başlatma Zinciri
+// Main thread for DLL initialization
 DWORD WINAPI MainThread(LPVOID lpReserved) {
-    // 1. MinHook'u Başlat
+    // 1. Initialize MinHook
     MH_Initialize();
 
-    // 2. İmza Taramaları ve Kancalar (Hack Motoru)
+    // 2. Pattern scanning and assembly hooks
     godModeAddress = PatternScan("GameAssembly.dll", "F3 0F 11 86 28 02 00 00");
     uintptr_t playerReadAddress = PatternScan("GameAssembly.dll", "F3 0F 10 B3 28 02 00 00 48 8B 82");
     uintptr_t goldReadAddress = PatternScan("GameAssembly.dll", "F3 0F 10 80 84 00 00 00 48 89 5C 24 50");
@@ -269,7 +280,7 @@ DWORD WINAPI MainThread(LPVOID lpReserved) {
         CreateHook((BYTE*)goldReadAddress, goldPayload, sizeof(goldPayload), 18);
     }
 
-    // 3. DirectX 11 Present Fonksiyonunu Bul ve Kancala
+    // 3. Find and Hook DirectX 11 Present function
     HWND hWnd = GetForegroundWindow();
     D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
     DXGI_SWAP_CHAIN_DESC sd;
@@ -292,7 +303,7 @@ DWORD WINAPI MainThread(LPVOID lpReserved) {
     
     if (SUCCEEDED(hr)) {
         void** pVTable = *reinterpret_cast<void***>(pDummySwapChain);
-        void* pPresent = pVTable[8]; // Present is at index 8 in IDXGISwapChain
+        void* pPresent = pVTable[8]; // Present is located at index 8 in IDXGISwapChain
 
         MH_CreateHook(pPresent, hkPresent, reinterpret_cast<void**>(&oPresent));
         MH_EnableHook(pPresent);
@@ -305,7 +316,7 @@ DWORD WINAPI MainThread(LPVOID lpReserved) {
     return 0;
 }
 
-// DLL Giriş Noktası
+// DLL Entry Point
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
