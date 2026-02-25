@@ -1,7 +1,5 @@
 # Visual Studio
 *.obj
-*.exe
-*.dll
 *.lib
 *.exp
 *.pdb
@@ -12,9 +10,9 @@
 *.recipe
 *.ilk
 
-# Dependencies (Already in git or fetched)
-imgui/
-minhook/
+# Build Artifacts
+bin/
+build/
 
 # Misc
 .vs/

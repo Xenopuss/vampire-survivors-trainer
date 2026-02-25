@@ -4,12 +4,12 @@
 #include <vector>
 
 // ImGui Headers
-#include "imgui/imgui.h"
-#include "imgui/backends/imgui_impl_win32.h"
-#include "imgui/backends/imgui_impl_dx11.h"
+#include "../vendor/imgui/imgui.h"
+#include "../vendor/imgui/backends/imgui_impl_win32.h"
+#include "../vendor/imgui/backends/imgui_impl_dx11.h"
 
 // MinHook Headers
-#include "minhook/include/MinHook.h"
+#include "../vendor/minhook/include/MinHook.h"
 
 #pragma comment(lib, "d3d11.lib")
 
