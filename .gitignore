@@ -1,0 +1,25 @@
+# Visual Studio
+*.obj
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.log
+*.tlog
+*.lastbuildstate
+*.idb
+*.recipe
+*.ilk
+
+# Dependencies (Already in git or fetched)
+imgui/
+minhook/
+
+# Misc
+.vs/
+.vscode/
+ipch/
+*.sln
+*.vcxproj
+*.user
